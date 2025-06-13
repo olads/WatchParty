@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Party - WebSocket Control Tester</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SockJS and STOMP over WebSocket (StompJs.Client) -->
+    <!-- Note: StompJs Client often works with SockJS automatically if needed, or directly with WebSockets -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+        }
+        .message-log {
+            max-height: 250px;
+            overflow-y: auto;
+            background-color: #e2e8f0; /* Lighter blue-gray */
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+        .message-log::-webkit-scrollbar {
+            width: 8px;
+        }
+        .message-log::-webkit-scrollbar-track {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .message-log::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        .message-log::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 bg-gray-100">
+<div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-3xl border border-gray-200">
+    <h1 class="text-4xl font-extrabold text-gray-900 mb-8 text-center">
+        Watch Party - WebSocket Control Tester
+    </h1>
+
+    <!-- Connection Status Section -->
+    <div class="mb-8 p-6 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm">
+        <h2 class="text-2xl font-semibold text-indigo-800 mb-4 text-center">Connection Status</h2>
+        <div class="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <button id="connectButton" class="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 transition duration-300 ease-in-out transform hover:scale-105">
+                Connect
+            </button>
+            <button id="disconnectButton" class="w-full sm:w-auto px-6 py-3 bg-red-600 text-white font-bold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition duration-300 ease-in-out transform hover:scale-105" disabled>
+                Disconnect
+            </button>
+        </div>
+        <p id="connectionStatus" class="mt-4 text-center text-md font-medium text-gray-700">Disconnected</p>
+    </div>
+
+    <!-- Send Controls Section -->
+    <div class="mb-8 p-6 bg-purple-50 border border-purple-200 rounded-lg shadow-sm">
+        <h2 class="text-2xl font-semibold text-purple-800 mb-4 text-center">Send Controls</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button id="playButton" class="px-6 py-3 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105" disabled>
+                Send Play
+            </button>
+            <button id="pauseButton" class="px-6 py-3 bg-orange-600 text-white font-bold rounded-lg shadow-md hover:bg-orange-700 transition duration-300 ease-in-out transform hover:scale-105" disabled>
+                Send Pause
+            </button>
+            <button id="seekButton" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105" disabled>
+                Send Seek (5s)
+            </button>
+            <button id="stopButton" class="px-6 py-3 bg-gray-600 text-white font-bold rounded-lg shadow-md hover:bg-gray-700 transition duration-300 ease-in-out transform hover:scale-105" disabled>
+                Send Stop
+            </button>
+        </div>
+    </div>
+
+    <!-- Received Messages Section -->
+    <div class="p-6 bg-cyan-50 border border-cyan-200 rounded-lg shadow-sm">
+        <h2 class="text-2xl font-semibold text-cyan-800 mb-4 text-center">Received Messages (from /control)</h2>
+        <div id="messageLog" class="message-log border border-gray-300 rounded-lg text-sm text-gray-800 space-y-2 p-4">
+            <!-- Messages will appear here -->
+            <p>Waiting for messages...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Use the StompJs library
+    // Ensure you have loaded the stomp.min.js script in your HTML head
+    let stompClient = null;
+    const connectButton = document.getElementById('connectButton');
+    const disconnectButton = document.getElementById('disconnectButton');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const messageLog = document.getElementById('messageLog');
+
+    const playButton = document.getElementById('playButton');
+    const pauseButton = document.getElementById('pauseButton');
+    const seekButton = document.getElementById('seekButton');
+    const stopButton = document.getElementById('stopButton');
+
+    /**
+     * Updates the UI elements based on the connection status.
+     * @param {boolean} connected - True if connected, false otherwise.
+     */
+    function setConnected(connected) {
+        connectButton.disabled = connected;
+        disconnectButton.disabled = !connected;
+        playButton.disabled = !connected;
+        pauseButton.disabled = !connected;
+        seekButton.disabled = !connected;
+        stopButton.disabled = !connected;
+        connectionStatus.textContent = connected ? 'Connected' : 'Disconnected';
+        connectionStatus.className = connected ? 'mt-4 text-center text-md font-medium text-green-600' : 'mt-4 text-center text-md font-medium text-red-600';
+
+        // Clear message log on disconnect
+        if (!connected) {
+            messageLog.innerHTML = '<p>Waiting for messages...</p>';
+        }
+    }
+
+    /**
+     * Connects to the WebSocket server using StompJs.Client.
+     */
+    function connect() {
+        // Initialize StompJs.Client
+        // The brokerURL should match your Spring Boot WebSocket endpoint
+        stompClient = new StompJs.Client({
+            brokerURL: 'ws://localhost:8080/ws', // Your WebSocket endpoint
+            webSocketFactory: () => new SockJS('/ws') // Use SockJS for compatibility
+        });
+
+        // Set up event handlers for the STOMP client
+        stompClient.onConnect = (frame) => {
+            console.log('Connected: ' + frame);
+            setConnected(true);
+
+            // Subscribe to the /control topic to receive messages
+            // Ensure this matches your @SendTo("/control") or @SendTo("/topic/control")
+            stompClient.subscribe('/control', (message) => {
+                console.log(JSON.parse(message.body))
+                showMessage(JSON.parse(message.body));
+            });
+        };
+
+        stompClient.onWebSocketError = (error) => {
+            console.error('Error with websocket:', error);
+            setConnected(false);
+            connectionStatus.textContent = 'Connection failed. See console for details.';
+            connectionStatus.className = 'mt-4 text-center text-md font-medium text-red-600';
+        };
+
+        stompClient.onStompError = (frame) => {
+            console.error('Broker reported error: ' + frame.headers['message']);
+            console.error('Additional details: ' + frame.body);
+            setConnected(false);
+            connectionStatus.textContent = 'STOMP error. See console for details.';
+            connectionStatus.className = 'mt-4 text-center text-md font-medium text-red-600';
+        };
+
+        stompClient.onDisconnect = () => {
+            console.log('Disconnected');
+            setConnected(false);
+            connectionStatus.textContent = 'Disconnected (Client initiated)';
+            connectionStatus.className = 'mt-4 text-center text-md font-medium text-red-600';
+        };
+
+        // Activate the STOMP client to initiate connection
+        stompClient.activate();
+    }
+
+    /**
+     * Disconnects from the WebSocket server using StompJs.Client.
+     */
+    function disconnect() {
+        if (stompClient !== null && stompClient.connected) {
+            stompClient.deactivate(); // Deactivates the client and closes connection
+        }
+    }
+
+    /**
+     * Displays a received message in the message log.
+     * @param {Object} message - The message object to display.
+     */
+    function showMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.className = 'bg-white p-3 rounded-md shadow-sm border border-gray-200';
+        messageElement.innerHTML = `<pre>${JSON.stringify(message, null, 2)}</pre>`; // Pretty print JSON
+        messageLog.prepend(messageElement); // Add new messages to the top
+        // Remove "Waiting for messages..." if it's there
+        if (messageLog.querySelector('p')) {
+            messageLog.querySelector('p').remove();
+        }
+    }
+
+    /**
+     * Sends a control message to the backend.
+     * @param {string} controlType - The control type (e.g., "PLAY", "PAUSE", "SEEK", "STOP").
+     * @param {number} [value] - Optional value for 'SEEK' action.
+     */
+    function sendControl(controlType, value = 0) {
+        if (stompClient && stompClient.connected) {
+            const controlMessage = {
+                controls: controlType,
+                value: value
+            };
+            // Send the message using stompClient.publish
+            stompClient.publish({
+                destination: "/input/control", // Your MessageMapping destination
+                body: JSON.stringify(controlMessage)
+            });
+            console.log("Sent control:", controlMessage);
+        } else {
+            console.warn("Not connected to WebSocket. Please connect first.");
+            connectionStatus.textContent = "Not connected. Please connect first.";
+            connectionStatus.className = 'mt-4 text-center text-md font-medium text-orange-600';
+        }
+    }
+
+    // Event Listeners
+    connectButton.addEventListener('click', connect);
+    disconnectButton.addEventListener('click', disconnect);
+
+    // Control buttons
+    playButton.addEventListener('click', () => sendControl('PLAY'));
+    pauseButton.addEventListener('click', () => sendControl('PAUSE'));
+    seekButton.addEventListener('click', () => sendControl('SEEK', 5)); // Example: seek to 5 seconds
+    stopButton.addEventListener('click', () => sendControl('STOP'));
+
+
+    // Initial UI state on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        setConnected(false);
+    });
+</script>
+</body>
+</html>

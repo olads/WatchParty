@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Playback</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+</head>
+<body>
+
+<video id="player" playsinline >
+<source src="" id="playerr" type="video/mp4">
+</video>
+
+
+<script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+<script>
+const player = new Plyr('#player');
+document.getElementById("playerr").src ="Not%20Enough%20Cover%20by%20Michelle.mp4"
+player.on("play", (value) => {
+  //  alert("playing now ");
+
+})
+
+player.on("timeupdate", (value, parent) => {
+   // console.log(player.currentTime)
+  //  player.forward(value.timeStamp.second + 0.02)
+})
+
+player.on("seeked", (value) => {
+    console.log(player.currentTime)
+   // player.forward(Math.abs(player.currentTime - 10))
+})
+function convertMilliToSeconds(number){
+    if(NaN) return 0;
+    else return number/1000;
+}
+</script>
+
+</body>
+</html>

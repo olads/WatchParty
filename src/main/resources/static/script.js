@@ -14,6 +14,8 @@ let plyrPlayerInstance = null; // Will hold the Plyr player instance
 const currentVideoTitle = document.getElementById('currentVideoTitle');
 const backToVideosButton = document.getElementById('backToVideosButton');
 var seekFromMe = false;
+
+var videoLink = "";
 // --- WebSocket Variables ---
 let stompClient = null;
 let isWebSocketConnected = false; // Internal flag to track WebSocket connection status
@@ -62,9 +64,11 @@ async function fetchVideos() {
             noVideosMessage.classList.remove('hidden'); // Show no videos message
         } else {
             videos.forEach(videoUrl => {
+                console.log(videoUrl)
                 // Extract filename from URL for display
                 const filename = videoUrl.substring(videoUrl.lastIndexOf('/') + 1);
-
+                console.log("/file/" + filename)
+                videoLink = "/file/" + filename
                 const listItem = document.createElement('li');
                 listItem.className = 'p-4 bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-xl transition-all duration-300 ease-in-out transform hover:-translate-y-1 cursor-pointer flex items-center justify-between group';
                 listItem.innerHTML = `
@@ -74,9 +78,10 @@ async function fetchVideos() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                 `;
-                listItem.dataset.videoUrl = videoUrl; // Store the full URL
-                listItem.addEventListener('click', () => playVideo(videoUrl, filename));
+                listItem.dataset.videoUrl = videoLink; // Store the full URL
+                listItem.addEventListener('click', () => playVideo(videoLink, filename));
                 videoList.appendChild(listItem);
+                console.log(videoLink)
             });
         }
     } catch (error) {

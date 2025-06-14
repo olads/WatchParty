@@ -18,6 +18,8 @@ var seekFromMe = false;
 var videoLink = "";
 // --- WebSocket Variables ---
 let stompClient = null;
+
+var currentControlType = String;
 let isWebSocketConnected = false; // Internal flag to track WebSocket connection status
 // Removed direct references to connectionStatus, sendPlayButton, etc. from HTML
 
@@ -134,6 +136,7 @@ function playVideo(videoUrl, videoName) {
  * These events are triggered by user interaction with Plyr's UI or internal player state changes.
  */
 function setupPlyrEventListeners() {
+   // seekFromMe = true;
     if (!plyrPlayerInstance) return; // Ensure Plyr is initialized
 
     // Send PLAY control when video starts playing
@@ -153,7 +156,7 @@ function setupPlyrEventListeners() {
     // Send SEEK control when user finishes seeking via Plyr's built-in progress bar
     plyrPlayerInstance.on('seeked', () => {
         if (isWebSocketConnected) {
-            seekFromMe = true;
+          //  seekFromMe = true;
             sendControl('SEEK', plyrPlayerInstance.currentTime);
 
         }
@@ -187,65 +190,69 @@ function handleGlobalHotkeys(event) {
         return;
     }
 
-    switch (event.key) {
-        case 'ArrowRight':
-            if (event.shiftKey) { // Shift + Right Arrow for fast forward (e.g., 60s)
-                sendControl('FORWARD', 60);
-            } else { // Standard Right Arrow for Plyr's default seekTime (10s)
-                sendControl('FORWARD', plyrPlayerInstance.config.seekTime);
-            }
-            event.preventDefault(); // Prevent default browser action (e.g., scrolling)
-            break;
-        case 'ArrowLeft':
-            if (event.shiftKey) { // Shift + Left Arrow for fast backward (e.g., 60s)
-                sendControl('BACKWARD', 60);
-            } else { // Standard Left Arrow for Plyr's default seekTime (10s)
-                sendControl('BACKWARD', plyrPlayerInstance.config.seekTime);
-            }
-            event.preventDefault(); // Prevent default browser action
-            break;
-        case ' ': // Spacebar for Play/Pause
-        case 'k': // YouTube-style play/pause
-            if (plyrPlayerInstance.paused) {
-                sendControl('PLAY', plyrPlayerInstance.currentTime);
-            } else {
-                sendControl('PAUSE', plyrPlayerInstance.currentTime);
-            }
-            event.preventDefault(); // Prevent default browser action (e.g., scrolling)
-            break;
-        case 'm': // Mute/Unmute
-            if (plyrPlayerInstance.muted) {
-                plyrPlayerInstance.muted = false;
-            } else {
-                plyrPlayerInstance.muted = true;
-            }
-            // Mute/unmute state doesn't need to be synced as it's client-side preference
-            break;
-        case 'Home': // Jump
-            // to beginning
-            sendControl('SEEK', 0);
-            event.preventDefault();
-            break;
-        case 'End': // Jump to end
-            if(!seekFromMe){
-                seekFromMe = true;
-                sendControl('SEEK', plyrPlayerInstance.duration);
+ //   if (!seekFromMe) {
+
+
+        switch (event.key) {
+            case 'ArrowRight':
+                if (event.shiftKey) { // Shift + Right Arrow for fast forward (e.g., 60s)
+                    sendControl('FORWARD', 60);
+                } else { // Standard Right Arrow for Plyr's default seekTime (10s)
+                    sendControl('FORWARD', plyrPlayerInstance.config.seekTime);
+                }
+                event.preventDefault(); // Prevent default browser action (e.g., scrolling)
+                break;
+            case 'ArrowLeft':
+                if (event.shiftKey) { // Shift + Left Arrow for fast backward (e.g., 60s)
+                    sendControl('BACKWARD', 60);
+                } else { // Standard Left Arrow for Plyr's default seekTime (10s)
+                    sendControl('BACKWARD', plyrPlayerInstance.config.seekTime);
+                }
+                event.preventDefault(); // Prevent default browser action
+                break;
+            case ' ': // Spacebar for Play/Pause
+            case 'k': // YouTube-style play/pause
+                if (plyrPlayerInstance.paused) {
+                    sendControl('PLAY', plyrPlayerInstance.currentTime);
+                } else {
+                    sendControl('PAUSE', plyrPlayerInstance.currentTime);
+                }
+                event.preventDefault(); // Prevent default browser action (e.g., scrolling)
+                break;
+            case 'm': // Mute/Unmute
+                if (plyrPlayerInstance.muted) {
+                    plyrPlayerInstance.muted = false;
+                } else {
+                    plyrPlayerInstance.muted = true;
+                }
+                // Mute/unmute state doesn't need to be synced as it's client-side preference
+                break;
+            case 'Home': // Jump
+                // to beginning
+                sendControl('SEEK', 0);
                 event.preventDefault();
-            }
+                break;
+            case 'End': // Jump to end
+                if (!seekFromMe) {
 
-            break;
-        // Add more hotkeys as desired, e.g., for volume:
-        case 'ArrowUp':
-            plyrPlayerInstance.increaseVolume(0.05); // Increase volume by 5%
-            event.preventDefault();
-            break;
-        case 'ArrowDown':
-            plyrPlayerInstance.decreaseVolume(0.05); // Decrease volume by 5%
-            event.preventDefault();
-            break;
-    }
+                    sendControl('SEEK', plyrPlayerInstance.duration);
+                    event.preventDefault();
+                }
+
+                break;
+            // Add more hotkeys as desired, e.g., for volume:
+            case 'ArrowUp':
+                plyrPlayerInstance.increaseVolume(0.05); // Increase volume by 5%
+                event.preventDefault();
+                break;
+            case 'ArrowDown':
+                plyrPlayerInstance.decreaseVolume(0.05); // Decrease volume by 5%
+                event.preventDefault();
+                break;
+        }
+        seekFromMe = true;
+  //  }
 }
-
 
 /**
  * Returns to the video list from the player, pausing video and resetting UI.
@@ -337,6 +344,8 @@ function connectWebSocket() {
             const receivedControl = JSON.parse(message.body);
 
             console.log( receivedControl.value)
+            currentControlType = receivedControl.controls
+            console.log(currentControlType);
             // Apply control to the Plyr video player if it's active and ready
             if (plyrPlayerInstance) {
                 console.log("ready to match")
@@ -365,7 +374,7 @@ function connectWebSocket() {
                         break;
                     case 'SEEK':
                         const seekValue = receivedControl.value;
-                        if (typeof seekValue === 'number' && !isNaN(seekValue) && !seekFromMe) {
+                        if (typeof seekValue === 'number' && !isNaN(seekValue) ) {
 
                             console.log("in the seek area")
                             plyrPlayerInstance.currentTime = seekValue;
@@ -428,6 +437,12 @@ function disconnectWebSocket() {
  * @param {number} [value] - Optional value (e.g., current time for play/pause, seek position, forward/backward amount).
  */
 function sendControl(controlType, value = 0) {
+console.log(currentControlType , controlType, "comparison"+ currentControlType === "")
+    if(currentControlType === controlType){
+        controlType = "";
+
+        return;
+    }
     if (stompClient && stompClient.connected) {
         const controlMessage = {
             controls: controlType,
@@ -442,6 +457,7 @@ function sendControl(controlType, value = 0) {
         // Console warning is sufficient for debugging.
         console.warn("Attempted to send control, but WebSocket is not connected.");
     }
+    currentControlType = "";
 }
 
 // --- Initial Setup on Page Load ---

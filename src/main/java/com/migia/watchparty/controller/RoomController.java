@@ -25,6 +25,7 @@ public class RoomController {
     @Autowired
     public RoomController(StorageService storageService){
         this.storageService = storageService;
+        storageService.init();
     }
 
 
